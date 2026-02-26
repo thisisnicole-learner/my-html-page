@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIDP 标注风控管理系统</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #fcfdfe;
+        }
+
+        /* 自定义滚动条 */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+
+        /* 动画 */
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- 图标组件封装 (解决 Lucide 在 React 动态渲染问题) ---
+        const Icon = ({ name, size = 16, className = "" }) => {
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        // --- 通用自定义 Checkbox ---
+        const CustomCheckbox = ({ checked, onChange, label, disabled }) => (
+            <label className={`flex items-center gap-2 cursor-pointer select-none ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
+                <div 
+                    onClick={() => !disabled && onChange(!checked)}
+                    className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${
+                        checked ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300 hover:border-blue-400'
+                    }`}
+                >
+                    {checked && <Icon name="check" size={12} className="text-white" />}
+                </div>
+                {label && <span className="text-xs text-gray-600 font-medium">{label}</span>}
+            </label>
+        );
+
+        // --- 主要应用组件 ---
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('strategy');
+            const [isCreating, setIsCreating] = useState(false);
+            
+            // 数据状态
+            const [strategies, setStrategies] = useState([
+                { id: 1, name: '准确率过低报警策略', config: '领题数 > 20 AND 准确率 < 10%', task: '任务1、任务2', action: '拉黑（限制领题）', status: '启用', creator: '蒋娅婕', time: '2026.2.13' },
+                { id: 2, name: '提交过快', config: '押后率 > 10%', task: '任务1', action: '拉黑（回收权限）', status: '停用', creator: '蒋娅婕', time: '2026.1.13' },
+            ]);
+
+            const [riskEvents, setRiskEvents] = useState([
+                { id: 1, project: '项目1', task: '任务1', node: '标注、质检', user: '张三', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', status: 'warn' },
+                { id: 2, project: '项目1', task: '任务1', node: '标注、质检', user: '李四', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', status: 'warn' },
+                { id: 3, project: '项目2', task: '任务1', node: '标注、质检', user: '王五', rule: '"准确率 < 70% AND 领题数 > 100"', action: '拉黑 (限制领题)', time: '2025.2.12', status: 'blocked' },
+            ]);
+
+            const [activeActionId, setActiveActionId] = useState(null);
+
+            // 初始化图标
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [activeTab, isCreating, activeActionId, strategies, riskEvents]);
+
+            // --- 列表操作 ---
+            const toggleStrategyStatus = (id) => {
+                setStrategies(prev => prev.map(s => s.id === id ? { ...s, status: s.status === '启用' ? '停用' : '启用' } : s));
+            };
+
+            const handleDashboardAction = (id, newAction) => {
+                setRiskEvents(prev => prev.map(item => item.id === id ? { ...item, action: newAction, status: 'blocked' } : item));
+                setActiveActionId(null);
+            };
+
+            const handleRelease = (id) => {
+                setRiskEvents(prev => prev.map(item => item.id === id ? { ...item, action: '无 (已解除)', status: 'normal' } : item));
+            };
+
+            // --- 渲染部分 ---
+            
+            const renderSidebar = () => (
+                <div className="w-44 bg-white border-r h-screen flex flex-col shrink-0 z-20">
+                    <div className="p-4 border-b flex items-center gap-2">
+                        <div className="bg-blue-600 p-1 rounded-md text-white"><Icon name="shield-alert" size={16} /></div>
+                        <span className="font-bold text-sm text-gray-800 tracking-tighter">AIDP数据服务</span>
+                    </div>
+                    <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 cursor-not-allowed">
+                            <Icon name="file-text" size={14} /> 需求管理
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 cursor-not-allowed">
+                            <Icon name="database" size={14} /> 数据管理
+                        </div>
+                        <div className="flex items-center justify-between px-3 py-1.5 text-xs text-gray-400 cursor-not-allowed">
+                            <div className="flex items-center gap-2"><Icon name="package" size={14} /> 项目管理</div>
+                            <Icon name="chevron-down" size={12} />
+                        </div>
+                        <div className="flex items-center justify-between px-3 py-1.5 text-xs text-gray-400 cursor-not-allowed">
+                            <div className="flex items-center gap-2"><Icon name="layers" size={14} /> 任务管理</div>
+                            <Icon name="chevron-down" size={12} />
+                        </div>
+                        <div className="py-0.5">
+                            <div className="flex items-center justify-between px-3 py-1.5 text-xs text-gray-800 font-bold cursor-pointer hover:bg-gray-50 rounded-md">
+                                <div className="flex items-center gap-2"><Icon name="shield-alert" size={14} className="text-blue-600"/> 风险监控</div>
+                                <Icon name="chevron-down" size={12} />
+                            </div>
+                            <div className="mt-1 space-y-0.5">
+                                <button onClick={() => {setActiveTab('strategy'); setIsCreating(false)}} className={`w-full text-left pl-9 pr-3 py-1.5 text-xs cursor-pointer rounded-md transition-colors ${activeTab === 'strategy' ? 'text-blue-600 bg-blue-50 font-bold border-r-2 border-blue-600' : 'text-gray-500 hover:text-gray-800'}`}>策略配置</button>
+                                <button onClick={() => {setActiveTab('dashboard'); setIsCreating(false)}} className={`w-full text-left pl-9 pr-3 py-1.5 text-xs cursor-pointer rounded-md transition-colors ${activeTab === 'dashboard' ? 'text-blue-600 bg-blue-50 font-bold border-r-2 border-blue-600' : 'text-gray-500 hover:text-gray-800'}`}>风险看板</button>
+                            </div>
+                        </div>
+                    </nav>
+                </div>
+            );
+
+            const renderHeader = () => (
+                <header className="h-12 bg-white border-b px-6 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+                    <div className="text-xs text-gray-400 flex items-center gap-2">
+                        风控管理 <span className="text-gray-300">/</span> <span className="text-gray-800 font-semibold">{isCreating ? '新建策略' : activeTab === 'strategy' ? '策略配置' : '风险看板'}</span>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <button className="text-blue-600 border border-blue-200 px-2.5 py-1 rounded text-[10px] font-bold bg-blue-50 hover:bg-blue-100">切换端</button>
+                        <button className="text-gray-400 hover:text-gray-600"><Icon name="bell" size={16} /></button>
+                        <div className="w-6 h-6 bg-cyan-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">EC</div>
+                    </div>
+                </header>
+            );
+
+            // --- 页面: 策略列表 ---
+            const StrategyListPage = () => (
+                <div className="p-6 space-y-4 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-gray-800">策略配置</h2>
+                        <button onClick={() => setIsCreating(true)} className="bg-blue-600 text-white px-4 py-1.5 rounded text-xs font-bold flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-100">
+                            <Icon name="plus" size={14} /> 创建风控策略
+                        </button>
+                    </div>
+                    <div className="bg-white p-4 rounded-md border border-gray-100 flex gap-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">项目名称/ID</span>
+                            <input type="text" placeholder="输入关键字" className="border rounded px-2 py-1.5 text-xs w-40 bg-gray-50 focus:bg-white focus:border-blue-500 outline-none" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">任务名称/ID</span>
+                            <input type="text" placeholder="输入关键字" className="border rounded px-2 py-1.5 text-xs w-40 bg-gray-50 focus:bg-white focus:border-blue-500 outline-none" />
+                        </div>
+                        <button className="bg-blue-600 text-white px-6 rounded text-xs font-bold hover:bg-blue-700 transition-colors">查询</button>
+                    </div>
+                    <div className="bg-white border rounded-md shadow-sm overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left min-w-[1000px] border-collapse">
+                            <thead className="bg-gray-50 border-b">
+                                <tr className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
+                                    <th className="px-5 py-3 w-16">编号</th>
+                                    <th className="px-5 py-3">策略</th>
+                                    <th className="px-5 py-3">指标配置</th>
+                                    <th className="px-5 py-3">作用任务</th>
+                                    <th className="px-5 py-3">触发动作</th>
+                                    <th className="px-5 py-3">开启状态</th>
+                                    <th className="px-5 py-3 text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y text-xs text-gray-600">
+                                {strategies.map(s => (
+                                    <tr key={s.id} className="hover:bg-blue-50/20 transition-colors">
+                                        <td className="px-5 py-4 text-gray-300 font-mono">{s.id}</td>
+                                        <td className="px-5 py-4 font-bold text-gray-800">{s.name}</td>
+                                        <td className="px-5 py-4"><span className="bg-gray-100 text-gray-500 px-2 py-1 rounded-sm border border-gray-200">{s.config}</span></td>
+                                        <td className="px-5 py-4">{s.task}</td>
+                                        <td className="px-5 py-4">{s.action}</td>
+                                        <td className="px-5 py-4">
+                                            <div className="flex items-center gap-1.5">
+                                                <div className={`w-1.5 h-1.5 rounded-full ${s.status === '启用' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                                {s.status}
+                                            </div>
+                                        </td>
+                                        <td className="px-5 py-4">
+                                            <div className="flex justify-center gap-4 font-bold text-blue-600">
+                                                <button className="hover:underline">编辑</button>
+                                                <button onClick={() => toggleStrategyStatus(s.id)} className="hover:underline">{s.status === '启用' ? '停用' : '启用'}</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+
+            // --- 页面: 创建策略表单 ---
+            const CreateStrategyPage = () => {
+                const [projType, setProjType] = useState('all');
+                const [taskType, setTaskType] = useState('custom');
+                const [nodeType, setNodeType] = useState('custom');
+                const [selectedTasks, setSelectedTasks] = useState(['任务1', '任务2']);
+                const [nodeStates, setNodeStates] = useState({ "任务1": ["标注"], "任务2": ["标注", "质检"] });
+                const [strategyChoice, setStrategyChoice] = useState('accuracy');
+                const [conditions, setConditions] = useState([{ id: 1, type: '合格率', op: '等于 (=)', val: '70', mode: 'instant' }]);
+
+                const toggleNode = (task, node) => {
+                    const current = nodeStates[task] || [];
+                    const updated = current.includes(node) ? current.filter(n => n !== node) : [...current, node];
+                    setNodeStates({ ...nodeStates, [task]: updated });
+                };
+
+                return (
+                    <div className="p-6 max-w-5xl mx-auto space-y-6 animate-fade-in pb-20">
+                        <div className="flex items-center gap-2 text-xs text-gray-400 hover:text-blue-600 cursor-pointer" onClick={() => setIsCreating(false)}>
+                            <Icon name="arrow-right" size={14} className="rotate-180" /> 返回列表
+                        </div>
+                        <h2 className="text-xl font-bold text-gray-800">新建风控策略</h2>
+
+                        {/* 基础信息 */}
+                        <section className="bg-white p-6 rounded-md border shadow-sm space-y-5">
+                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><div className="w-1 h-3.5 bg-blue-600 rounded-full" /> 基础信息</h3>
+                            <div className="grid grid-cols-2 gap-8 max-w-2xl">
+                                <div className="space-y-1.5"><label className="text-xs font-bold text-gray-600 flex gap-0.5"><span className="text-red-500">*</span>策略命名</label><input type="text" className="w-full border rounded-sm px-3 py-2 text-xs outline-none focus:border-blue-500 bg-gray-50" placeholder="请输入策略名称" /></div>
+                                <div className="space-y-1.5"><label className="text-xs font-bold text-gray-600 flex gap-0.5"><span className="text-red-500">*</span>策略Owner</label><input type="text" className="w-full border rounded-sm px-3 py-2 text-xs outline-none focus:border-blue-500 bg-gray-50" placeholder="请输入姓名" /></div>
+                            </div>
+                        </section>
+
+                        {/* 作用范围 */}
+                        <section className="bg-white p-6 rounded-md border shadow-sm space-y-6">
+                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><div className="w-1 h-3.5 bg-blue-600 rounded-full" /> 作用范围</h3>
+                            <div className="space-y-5 text-xs">
+                                <div className="flex items-start gap-4">
+                                    <label className="w-20 font-bold text-gray-600 mt-1.5"><span className="text-red-500">*</span>项目</label>
+                                    <div className="flex gap-6">
+                                        <label className="flex items-center gap-2 cursor-pointer" onClick={() => setProjType('all')}><input type="radio" checked={projType === 'all'} readOnly className="w-3.5 h-3.5 text-blue-600" /> 全部进行中项目</label>
+                                        <label className="flex items-center gap-2 cursor-pointer" onClick={() => setProjType('custom')}><input type="radio" checked={projType === 'custom'} readOnly className="w-3.5 h-3.5 text-blue-600" /> 自定义项目</label>
+                                    </div>
+                                </div>
+                                {projType === 'custom' && <div className="ml-24 border rounded-sm p-2 w-80 bg-gray-50 flex items-center gap-2 border-blue-200"><span className="bg-blue-600 text-white px-2 py-0.5 rounded-sm text-[10px] font-bold">项目1 <Icon name="x" size={10} /></span><Icon name="chevron-down" size={14} className="ml-auto text-gray-400" /></div>}
+
+                                <div className="flex items-start gap-4 border-t border-gray-50 pt-4">
+                                    <label className="w-20 font-bold text-gray-600 mt-1.5"><span className="text-red-500">*</span>任务</label>
+                                    <div className="flex-1 space-y-3">
+                                        <div className="flex gap-6">
+                                            <label className="flex items-center gap-2 cursor-pointer" onClick={() => setTaskType('all')}><input type="radio" checked={taskType === 'all'} readOnly className="w-3.5 h-3.5 text-blue-600" /> 全部进行中任务</label>
+                                            <label className="flex items-center gap-2 cursor-pointer" onClick={() => setTaskType('custom')}><input type="radio" checked={taskType === 'custom'} readOnly className="w-3.5 h-3.5 text-blue-600" /> 自定义任务</label>
+                                        </div>
+                                        {taskType === 'custom' && (
+                                            <div className="border rounded-sm p-2 w-80 bg-gray-50 flex flex-wrap gap-2 border-blue-200">
+                                                {selectedTasks.map(t => <span key={t} className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-sm text-[10px] font-bold">{t} <Icon name="x" size={10} className="inline ml-1" /></span>)}
+                                                <Icon name="chevron-down" size={14} className="ml-auto self-center text-gray-400" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {taskType === 'custom' && (
+                                    <div className="flex items-start gap-4 border-t border-gray-50 pt-4">
+                                        <label className="w-20 font-bold text-gray-600 mt-1.5"><span className="text-red-500">*</span>任务节点</label>
+                                        <div className="flex-1 space-y-4">
+                                            <div className="flex gap-6">
+                                                <label className="flex items-center gap-2 cursor-pointer" onClick={() => setNodeType('all')}><input type="radio" checked={nodeType === 'all'} readOnly className="w-3.5 h-3.5 text-blue-600" /> 全部节点</label>
+                                                <label className="flex items-center gap-2 cursor-pointer" onClick={() => setNodeType('custom')}><input type="radio" checked={nodeType === 'custom'} readOnly className="w-3.5 h-3.5 text-blue-600" /> 自定义节点</label>
+                                            </div>
+                                            {nodeType === 'custom' && (
+                                                <div className="bg-blue-50/20 p-4 rounded-md space-y-4 max-w-2xl border border-blue-50">
+                                                    {selectedTasks.map(t => (
+                                                        <div key={t} className="flex items-center gap-8">
+                                                            <span className="font-bold text-gray-500 w-16 border-b-2 border-red-400 pb-0.5">*{t}</span>
+                                                            <div className="flex gap-6">
+                                                                {['标注', '质检', '抽检'].map(n => <CustomCheckbox key={n} label={n} checked={(nodeStates[t] || []).includes(n)} onChange={() => toggleNode(t, n)} />)}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
+                        {/* 策略配置 */}
+                        <section className="bg-white p-6 rounded-md border shadow-sm space-y-6">
+                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><div className="w-1 h-3.5 bg-blue-600 rounded-full" /> 策略配置</h3>
+                            <div className="space-y-6 text-xs">
+                                <div className="flex items-start gap-4">
+                                    <label className="w-20 font-bold text-gray-600 mt-1.5"><span className="text-red-500">*</span>策略选择</label>
+                                    <div className="flex flex-col gap-3">
+                                        {['准确率过低报警策略', '提交过快', '自定义'].map((choice, idx) => (
+                                            <label key={choice} className="flex items-center gap-2 cursor-pointer" onClick={() => setStrategyChoice(idx === 0 ? 'accuracy' : idx === 1 ? 'speed' : 'custom')}>
+                                                <input type="radio" checked={(idx === 0 && strategyChoice === 'accuracy') || (idx === 1 && strategyChoice === 'speed') || (idx === 2 && strategyChoice === 'custom')} readOnly className="w-3.5 h-3.5 text-blue-600" /> <span className={idx === 0 ? "font-bold text-gray-700" : ""}>{choice}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-4 border-t border-gray-50 pt-4">
+                                    {conditions.map((cond, idx) => (
+                                        <div key={cond.id} className="flex flex-wrap items-end gap-3 p-5 rounded-md border border-dashed border-blue-200 bg-blue-50/10 relative shadow-sm">
+                                            <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow-md">{idx + 1}</div>
+                                            <div className="flex flex-col gap-1.5 min-w-[140px]"><span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">指标项</span><select className="border rounded-sm bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-500"><option>{cond.type}</option></select></div>
+                                            <div className="flex flex-col gap-1.5 min-w-[120px]"><span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">运算关系</span><select className="border rounded-sm bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-500"><option>{cond.op}</option></select></div>
+                                            <div className="flex flex-col gap-1.5 w-20"><span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">阈值 (%)</span><input type="text" defaultValue={cond.val} className="border rounded-sm bg-white px-2 py-1.5 text-xs text-center focus:border-blue-500 font-bold text-blue-600" /></div>
+                                            <div className="flex flex-col gap-1.5">
+                                                <span className="text-[10px] text-gray-400 font-bold uppercase"><span className="text-red-500">*</span> 持续时间</span>
+                                                <div className="flex items-center">
+                                                    <div className="flex border rounded-sm overflow-hidden bg-white">
+                                                        <button onClick={() => {const n=[...conditions]; n[idx].mode='instant'; setConditions(n)}} className={`px-3 py-1.5 text-[10px] font-bold ${cond.mode==='instant' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>即时</button>
+                                                        <button onClick={() => {const n=[...conditions]; n[idx].mode='continuous'; setConditions(n)}} className={`px-3 py-1.5 text-[10px] font-bold ${cond.mode==='continuous' ? 'bg-blue-600 text-white' : 'text-gray-500'}`}>持续</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => setConditions(prev => prev.filter(c => c.id !== cond.id))} className="p-2 text-gray-300 hover:text-red-500 self-center"><Icon name="trash-2" size={18} /></button>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => setConditions([...conditions, { id: Date.now(), type: '准确率', op: '小于 (<)', val: '60', mode: 'instant' }])} className="bg-white text-blue-600 border border-blue-600 px-4 py-1.5 rounded-sm text-xs font-bold hover:bg-blue-50 flex items-center gap-1.5"><Icon name="plus" size={14} /> 添加指标行</button>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* 触发动作 */}
+                        <section className="bg-white p-6 rounded-md border shadow-sm space-y-6 text-xs">
+                            <h3 className="font-bold text-gray-800 text-sm flex items-center gap-2"><div className="w-1 h-3.5 bg-blue-600 rounded-full" /> 触发动作</h3>
+                            <div className="flex gap-12">
+                                <label className="flex items-center gap-2 cursor-pointer group"><input type="radio" name="act" defaultChecked className="w-4 h-4 text-blue-600" /> <span className="font-bold">拉黑 (限制领题)</span></label>
+                                <label className="flex items-center gap-2 cursor-pointer group opacity-60"><input type="radio" name="act" className="w-4 h-4 text-blue-600" /> <span className="font-bold">拉黑 (回收权限)</span></label>
+                                <label className="flex items-center gap-2 cursor-pointer group"><input type="radio" name="act" className="w-4 h-4 text-blue-600" /> <span className="font-bold">仅通知</span></label>
+                            </div>
+                        </section>
+
+                        <div className="flex justify-center gap-6 pt-6 sticky bottom-0 bg-gray-50/80 backdrop-blur-sm py-4 border-t border-gray-100">
+                            <button onClick={() => setIsCreating(false)} className="px-12 py-2 border border-gray-200 rounded-sm text-xs font-bold text-gray-500 hover:bg-white transition-all">取消</button>
+                            <button onClick={() => setIsCreating(false)} className="px-12 py-2 bg-blue-600 text-white rounded-sm text-xs font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all active:scale-95">提交保存并开启</button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // --- 页面: 风险看板 ---
+            const DashboardPage = () => (
+                <div className="p-6 space-y-4 animate-fade-in">
+                    <h2 className="text-lg font-bold text-gray-800">风险看板</h2>
+                    <div className="bg-white p-4 rounded-md border border-gray-100 shadow-sm grid grid-cols-4 gap-6 items-end">
+                        <div className="flex flex-col gap-1.5"><span className="text-[10px] text-gray-400 font-bold tracking-wider">项目/ID</span><input type="text" placeholder="搜索项目" className="border rounded px-3 py-1.5 text-xs bg-gray-50 outline-none focus:border-blue-500" /></div>
+                        <div className="flex flex-col gap-1.5"><span className="text-[10px] text-gray-400 font-bold tracking-wider">任务/ID</span><input type="text" placeholder="搜索任务" className="border rounded px-3 py-1.5 text-xs bg-gray-50 outline-none focus:border-blue-500" /></div>
+                        <div className="flex flex-col gap-1.5"><span className="text-[10px] text-gray-400 font-bold tracking-wider">专家姓名</span><input type="text" placeholder="搜索姓名" className="border rounded px-3 py-1.5 text-xs bg-gray-50 outline-none focus:border-blue-500" /></div>
+                        <button className="bg-blue-600 text-white px-8 py-2 rounded text-xs font-bold hover:bg-blue-700">查询</button>
+                    </div>
+
+                    <div className="bg-white border rounded-md shadow-sm overflow-x-auto custom-scrollbar">
+                        <table className="w-full text-left min-w-[1000px] border-collapse">
+                            <thead className="bg-gray-50 border-b">
+                                <tr className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">
+                                    <th className="px-5 py-3">项目/ID</th><th className="px-5 py-3">任务/ID</th><th className="px-5 py-3">节点</th><th className="px-5 py-3">姓名</th><th className="px-5 py-3">命中规则</th><th className="px-5 py-3">动作</th><th className="px-5 py-3">风险时间</th><th className="px-5 py-3 text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y text-xs text-gray-600">
+                                {riskEvents.map((item) => (
+                                    <tr key={item.id} className={`hover:bg-blue-50/40 transition-colors ${item.status === 'blocked' ? 'bg-red-50/10' : ''}`}>
+                                        <td className="px-5 py-4 font-bold text-gray-800">{item.project}</td>
+                                        <td className="px-5 py-4 text-gray-500">{item.task}</td>
+                                        <td className="px-5 py-4"><span className="bg-gray-100 px-1.5 py-0.5 rounded-sm text-[10px]">{item.node}</span></td>
+                                        <td className="px-5 py-4 flex items-center gap-2"><div className="w-5 h-5 bg-gray-200 rounded-full flex items-center justify-center text-gray-500"><Icon name="user" size={10}/></div><span className="font-semibold text-gray-700">{item.user}</span></td>
+                                        <td className="px-5 py-4"><div className="px-2 py-1.5 bg-yellow-50 text-yellow-700 text-[10px] border border-yellow-200 rounded-sm font-mono max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">{item.rule}</div></td>
+                                        <td className="px-5 py-4">
+                                            <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold ${item.status==='blocked' ? 'bg-red-600 text-white' : item.status==='normal' ? 'bg-gray-100 text-gray-400' : 'bg-orange-100 text-orange-600'}`}>
+                                                {item.action}
+                                            </span>
+                                        </td>
+                                        <td className="px-5 py-4 text-gray-400 font-mono tracking-tighter">{item.time}</td>
+                                        <td className="px-5 py-4 text-center relative">
+                                            {item.status === 'blocked' ? (
+                                                <button onClick={() => handleRelease(item.id)} className="font-bold text-green-600 hover:underline flex items-center gap-1 mx-auto transition-all"><Icon name="unlock" size={12}/>解除限制</button>
+                                            ) : (
+                                                <div className="flex flex-col items-center">
+                                                    <button 
+                                                        onClick={() => setActiveActionId(activeActionId === item.id ? null : item.id)}
+                                                        className="font-bold text-red-600 hover:underline flex items-center gap-1"
+                                                    >
+                                                        <Icon name="lock" size={12}/>手动拉黑
+                                                    </button>
+                                                    
+                                                    {activeActionId === item.id && (
+                                                        <div className="absolute top-10 right-1/2 translate-x-1/2 w-32 bg-white border shadow-xl rounded-md py-1 z-30 animate-in fade-in zoom-in-95 duration-200">
+                                                            <button onClick={() => handleDashboardAction(item.id, '拉黑 (限制领题)')} className="w-full text-left px-3 py-1.5 text-[10px] hover:bg-gray-100 font-medium">限制领题</button>
+                                                            <button onClick={() => handleDashboardAction(item.id, '拉黑 (回收权限)')} className="w-full text-left px-3 py-1.5 text-[10px] hover:bg-gray-100 font-medium border-t">回收任务权限</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="flex min-h-screen text-gray-900 overflow-hidden">
+                    {renderSidebar()}
+                    <div className="flex-1 overflow-y-auto flex flex-col h-screen relative">
+                        {renderHeader()}
+                        <main className="flex-1">
+                            {activeTab === 'strategy' ? (
+                                isCreating ? <CreateStrategyPage /> : <StrategyListPage />
+                            ) : <DashboardPage />}
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
