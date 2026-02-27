@@ -1,697 +1,687 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  LayoutGrid, 
-  Database, 
-  Briefcase, 
-  ClipboardList, 
-  ShieldAlert, 
-  ChevronDown, 
-  ChevronRight, 
-  Search, 
-  Plus, 
-  Mail, 
-  HelpCircle, 
-  X,
-  MoreHorizontal,
-  Trash2,
-  AlertCircle,
-  History,
-  Info
-} from 'lucide-react';
-
-// --- 模拟数据 ---
-const INITIAL_STRATEGIES = [
-  { id: 1, name: '限制准确率过低报警策略', metrics: '领题数>20 AND 准确率<10%', tasks: '任务1、任务2', action: '拉黑（限制领题）', status: '启用', creator: '臧娅婕', time: '2026.2.13' },
-  { id: 2, name: '提交过快', metrics: '押后率>10%', tasks: '任务1', action: '拉黑（回收权限）', status: '停用', creator: '臧娅婕', time: '2026.1.13' },
-];
-
-const INITIAL_RISKS = [
-  { id: 1, project: '项目1', task: '任务1', nodes: '标注、质检', name: '张三', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', isBlocked: false },
-  { id: 2, project: '项目1', task: '任务1', nodes: '标注、质检', name: '李四', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', isBlocked: false },
-  { id: 3, project: '项目1', task: '任务2', nodes: '质检', name: '王五', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', isBlocked: false },
-  { id: 4, project: '项目2', task: '任务1', nodes: '标注、质检', name: '张三', rule: '"准确率 < 70% AND 领题数 > 100"', action: '拉黑（限制领题）', time: '2025.2.12', isBlocked: true },
-];
-
-const TASKS_DATA = [
-  { id: '7602479166420913983', name: '正式-智能化全量券JM-FZ', project: '项目1', editor: 'mofei.murphy' },
-  { id: '7611023842630930212', name: 'multi_dim_data_partv2_202601', project: '项目2', editor: 'wuwenhui.ihpb' },
-  { id: '7524539180375101222', name: '正式-智能化全量券JF-SKU采集', project: '项目1', editor: 'meiyu' },
-  { id: '7577390228706217755', name: '【正式】BR1-【全量】将筷子等放到拼图的分割盒里', project: '项目3', editor: 'sudo123' },
-];
-
-// --- 主应用组件 ---
-export default function App() {
-  const [activeMenu, setActiveMenu] = useState('风险看板');
-  const [isSubMenuOpen, setIsSubMenuOpen] = useState(true);
-  const [strategies, setStrategies] = useState(INITIAL_STRATEGIES);
-  const [risks, setRisks] = useState(INITIAL_RISKS);
-  const [isConfigDrawerOpen, setIsConfigDrawerOpen] = useState(false);
-  const [showCreatePage, setShowCreatePage] = useState(false);
-  const [targetTask, setTargetTask] = useState(null);
-
-  // 渲染页面主体
-  const renderContent = () => {
-    if (showCreatePage) {
-      return <StrategyForm onCancel={() => setShowCreatePage(false)} onSave={() => setShowCreatePage(false)} />;
-    }
-
-    switch (activeMenu) {
-      case '风险看板':
-        return <RiskDashboard risks={risks} setRisks={setRisks} />;
-      case '策略配置':
-        return <StrategyBoard strategies={strategies} setStrategies={setStrategies} onCreate={() => setShowCreatePage(true)} />;
-      case '任务管理':
-        return <TaskManager onOpenConfig={(task) => { setTargetTask(task); setIsConfigDrawerOpen(true); }} />;
-      default:
-        return <div className="p-8 text-gray-500">功能开发中...</div>;
-    }
-  };
-
-  return (
-    <div className="flex h-screen bg-[#F5F7FA] text-gray-800 font-sans overflow-hidden text-[13px]">
-      {/* 侧边栏 (收窄至 w-52) */}
-      <aside className="w-52 bg-white border-r flex flex-col shrink-0 z-20">
-        <div className="p-4 border-b flex items-center gap-2">
-          <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0">A</div>
-          <span className="font-bold text-blue-600 text-[15px] truncate">AIDP服务平台</span>
-        </div>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIDP 数据服务平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         
-        <nav className="flex-1 overflow-y-auto py-2">
-          <MenuItem icon={<LayoutGrid size={16}/>} label="需求管理" />
-          <MenuItem icon={<Database size={16}/>} label="数据管理" />
-          <MenuItem icon={<Briefcase size={16}/>} label="项目管理" expandable />
-          <MenuItem 
-            icon={<ClipboardList size={16}/>} 
-            label="任务管理" 
-            active={activeMenu === '任务管理'} 
-            onClick={() => { setActiveMenu('任务管理'); setShowCreatePage(false); }}
-            expandable 
-          />
-          <div className="mt-1">
-            <button 
-              onClick={() => setIsSubMenuOpen(!isSubMenuOpen)}
-              className={`w-full flex items-center justify-between px-4 py-2 hover:bg-gray-100 transition-colors ${activeMenu.includes('风险') || activeMenu === '策略配置' ? 'text-blue-600 bg-blue-50/50' : ''}`}
-            >
-              <div className="flex items-center gap-2.5">
-                <ShieldAlert size={16} />
-                <span className="font-medium">风险监控</span>
-              </div>
-              {isSubMenuOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 13px; 
+            background-color: #F5F7FA;
+        }
+        
+        .active-menu-item {
+            color: #2563eb !important;
+            background-color: rgba(37, 99, 235, 0.05);
+            border-right: 2px solid #2563eb;
+        }
+
+        .hide { display: none !important; }
+        
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+
+        /* 动画效果 */
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .slide-in { animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes slideIn {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+
+        /* 样式复刻 */
+        .strategy-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #E5E7EB;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .metric-row {
+            background-color: #F9FAFB;
+            border: 1px dashed #D1D5DB;
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+        }
+        .index-circle {
+            width: 24px;
+            height: 24px;
+            background: #DBEAFE;
+            color: #2563eb;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+        .toggle-btn-group {
+            display: flex;
+            background: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 6px;
+            padding: 2px;
+        }
+        .toggle-btn {
+            padding: 2px 8px;
+            font-size: 10px;
+            border-radius: 4px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .toggle-btn.active {
+            background: #2563eb;
+            color: white;
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased overflow-hidden">
+    <div class="flex h-screen w-full overflow-hidden">
+        <!-- 侧边菜单栏 -->
+        <aside class="w-52 bg-white border-r flex flex-col shrink-0 z-20">
+            <div class="p-4 border-b flex items-center gap-2">
+                <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">A</div>
+                <span class="font-bold text-blue-600 text-[15px] tracking-tight">AIDP服务平台</span>
+            </div>
             
-            {isSubMenuOpen && (
-              <div className="bg-white">
-                <button 
-                  onClick={() => { setActiveMenu('策略配置'); setShowCreatePage(false); }}
-                  className={`w-full text-left pl-10 pr-4 py-2 hover:text-blue-600 transition-colors ${activeMenu === '策略配置' ? 'text-blue-600 bg-blue-50 font-medium' : 'text-gray-500'}`}
-                >
-                  策略配置
-                </button>
-                <button 
-                  onClick={() => { setActiveMenu('风险看板'); setShowCreatePage(false); }}
-                  className={`w-full text-left pl-10 pr-4 py-2 hover:text-blue-600 transition-colors ${activeMenu === '风险看板' ? 'text-blue-600 bg-blue-50 font-medium' : 'text-gray-500'}`}
-                >
-                  风险看板
-                </button>
-              </div>
-            )}
-          </div>
-        </nav>
-      </aside>
-
-      {/* 主体内容区域 */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <header className="h-12 bg-white border-b flex items-center justify-between px-6 shrink-0 z-10">
-          <div className="text-gray-400 text-[12px]">
-            {activeMenu} {showCreatePage ? ' / 策略配置' : ''}
-          </div>
-          <div className="flex items-center gap-5">
-            <button className="text-blue-600 border border-blue-600 px-2 py-0.5 rounded text-[11px] hover:bg-blue-50 transition-colors">切换端</button>
-            <div className="flex items-center gap-4 text-gray-500">
-              <HelpCircle size={18} className="cursor-pointer hover:text-blue-600" />
-              <Mail size={18} className="cursor-pointer hover:text-blue-600" />
-              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200">EC</div>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-auto p-5">
-          <div className="max-w-[1600px] mx-auto">
-            {renderContent()}
-          </div>
-        </div>
-
-        {/* 任务管理策略配置侧边抽屉 */}
-        {isConfigDrawerOpen && (
-          <div className="fixed inset-0 z-50 flex justify-end">
-            <div className="absolute inset-0 bg-black/20 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => { setIsConfigDrawerOpen(false); setTargetTask(null); }}></div>
-            <div className="relative w-full max-w-[850px] h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-              <div className="p-4 border-b flex items-center justify-between shrink-0">
-                <h2 className="font-bold text-[16px] flex items-center gap-2">
-                  <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
-                  策略配置
-                </h2>
-                <div className="flex gap-2">
-                  <button onClick={() => { setIsConfigDrawerOpen(false); setTargetTask(null); }} className="px-4 py-1.5 border rounded hover:bg-gray-50">取消</button>
-                  <button onClick={() => { setIsConfigDrawerOpen(false); setTargetTask(null); }} className="px-4 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 shadow-lg shadow-blue-100 font-medium">保存并生效</button>
+            <nav class="flex-1 overflow-y-auto py-2">
+                <div onclick="switchPlaceholder('需求管理')" class="nav-item px-4 py-2 hover:bg-gray-50 flex items-center gap-2.5 text-gray-600 cursor-pointer transition-colors" id="nav-demand">
+                    <i data-lucide="layout-grid" class="w-4 h-4 opacity-70"></i>
+                    <span class="font-medium">需求管理</span>
                 </div>
-              </div>
-              <div className="flex-1 overflow-y-auto bg-[#F5F7FA] p-6">
-                <StrategyForm embedded initialTask={targetTask} onCancel={() => setIsConfigDrawerOpen(false)} />
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
-
-// 侧边栏项组件
-function MenuItem({ icon, label, expandable, active, onClick }) {
-  return (
-    <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-2 hover:bg-gray-50 transition-colors ${active ? 'text-blue-600 bg-blue-50/50 border-r-2 border-blue-600' : ''}`}>
-      <div className="flex items-center gap-2.5 text-gray-700">
-        <span className={active ? 'text-blue-600' : 'text-gray-400'}>{icon}</span>
-        <span className={`font-medium ${active ? 'text-blue-600' : ''}`}>{label}</span>
-      </div>
-      {expandable && <ChevronDown size={14} className="text-gray-300" />}
-    </button>
-  );
-}
-
-// --- 风险看板组件 ---
-function RiskDashboard({ risks, setRisks }) {
-  const [blockingUser, setBlockingUser] = useState(null);
-
-  const handleBlockAction = (id, actionType) => {
-    setRisks(prev => prev.map(r => 
-      r.id === id ? { ...r, isBlocked: true, action: `拉黑（${actionType}）` } : r
-    ));
-    setBlockingUser(null);
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-white p-5 rounded-lg shadow-sm border">
-        <div className="flex justify-between items-center mb-5">
-           <h1 className="text-[16px] font-bold">风险看板</h1>
-           <div className="text-gray-500 font-medium">今日风控人数 <span className="text-xl font-bold text-gray-900 ml-2">30人</span></div>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 mb-6 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
-          <FilterInput label="项目名称/ID" placeholder="请输入项目名称/ID" />
-          <FilterInput label="任务名称/ID" placeholder="请输入任务名称/ID" />
-          <FilterInput label="姓名" placeholder="请输入姓名" />
-          <FilterInput label="时间范围" placeholder="请筛选风控时间" />
-          <button className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors font-medium">查询</button>
-        </div>
-
-        <div className="w-full overflow-x-auto border border-gray-100 rounded-lg">
-          <table className="w-full text-left min-w-[1100px]">
-            <thead className="bg-gray-50 text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-medium">项目名称/ID</th>
-                <th className="px-4 py-3 font-medium">任务名称/ID</th>
-                <th className="px-4 py-3 font-medium">节点</th>
-                <th className="px-4 py-3 font-medium">姓名</th>
-                <th className="px-4 py-3 font-medium">命中规则</th>
-                <th className="px-4 py-3 font-medium">执行动作</th>
-                <th className="px-4 py-3 font-medium">风控时间</th>
-                <th className="px-4 py-3 font-medium">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {risks.map((risk) => (
-                <tr key={risk.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-4">{risk.project}</td>
-                  <td className="px-4 py-4">{risk.task}</td>
-                  <td className="px-4 py-4 text-gray-500">{risk.nodes}</td>
-                  <td className="px-4 py-4">{risk.name}</td>
-                  <td className="px-4 py-4 text-gray-600 italic font-mono text-[12px]">{risk.rule}</td>
-                  <td className="px-4 py-4">
-                    <span className={risk.isBlocked ? 'text-orange-600 font-medium' : 'text-gray-400'}>{risk.action}</span>
-                  </td>
-                  <td className="px-4 py-4 text-gray-400 font-mono text-[12px]">{risk.time}</td>
-                  <td className="px-4 py-4 whitespace-nowrap">
-                    <div className="flex gap-4">
-                      {risk.isBlocked ? (
-                        <button onClick={() => setRisks(prev => prev.map(r => r.id === risk.id ? {...r, isBlocked:false, action:'仅通知'} : r))} className="text-blue-600 hover:underline">解除黑名单</button>
-                      ) : (
-                        <button onClick={() => setBlockingUser(risk)} className="text-blue-600 hover:underline">拉黑</button>
-                      )}
-                      <button className="text-blue-600 hover:underline">操作记录</button>
+                <div onclick="switchPlaceholder('数据管理')" class="nav-item px-4 py-2 hover:bg-gray-50 flex items-center gap-2.5 text-gray-600 cursor-pointer transition-colors" id="nav-data">
+                    <i data-lucide="database" class="w-4 h-4 opacity-70"></i>
+                    <span class="font-medium">数据管理</span>
+                </div>
+                <div onclick="switchPlaceholder('项目管理')" class="nav-item px-4 py-2 hover:bg-gray-50 flex items-center justify-between text-gray-700 cursor-pointer transition-colors" id="nav-project">
+                    <div class="flex items-center gap-2.5">
+                        <i data-lucide="briefcase" class="w-4 h-4 opacity-70"></i>
+                        <span class="font-medium">项目管理</span>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 拉黑动作弹窗 */}
-      {blockingUser && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 text-orange-500 mb-4">
-               <AlertCircle size={24}/>
-               <h3 className="text-lg font-bold text-gray-900">执行拉黑</h3>
-            </div>
-            <p className="text-gray-500 mb-6 leading-relaxed">请选择对用户 <span className="font-bold text-gray-800">{blockingUser.name}</span> 执行的具体拉黑策略：</p>
-            <div className="space-y-2 mb-8">
-              <button 
-                onClick={() => handleBlockAction(blockingUser.id, '限制领题')}
-                className="w-full text-left p-4 border rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center justify-between group"
-              >
-                <div className="flex flex-col">
-                  <span className="font-bold text-gray-800">限制领题</span>
-                  <span className="text-[11px] text-gray-400">该用户将无法领取任何新题目</span>
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-40"></i>
                 </div>
-                <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500" />
-              </button>
-              <button 
-                onClick={() => handleBlockAction(blockingUser.id, '回收权限')}
-                className="w-full text-left p-4 border rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center justify-between group"
-              >
-                <div className="flex flex-col">
-                  <span className="font-bold text-gray-800">回收权限</span>
-                  <span className="text-[11px] text-gray-400">强制终止该用户在当前任务的所有权限</span>
-                </div>
-                <ChevronRight size={18} className="text-gray-300 group-hover:text-blue-500" />
-              </button>
-            </div>
-            <div className="flex justify-end">
-              <button onClick={() => setBlockingUser(null)} className="px-6 py-2 text-gray-400 hover:text-gray-600 font-medium transition-colors">取消</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- 策略看板组件 ---
-function StrategyBoard({ strategies, setStrategies, onCreate }) {
-  const toggleStatus = (id) => {
-    setStrategies(prev => prev.map(s => 
-      s.id === id ? { ...s, status: s.status === '启用' ? '停用' : '启用' } : s
-    ));
-  };
-
-  return (
-    <div className="bg-white p-5 rounded-lg shadow-sm border">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-[16px] font-bold">策略配置</h1>
-        <button onClick={onCreate} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md shadow-blue-50 font-medium">
-          <Plus size={18} />
-          创建风控策略
-        </button>
-      </div>
-
-      <div className="flex gap-4 mb-6">
-        <FilterInput label="项目名称/ID" placeholder="请输入项目名称/ID" />
-        <FilterInput label="任务名称/ID" placeholder="请输入任务名称/ID" />
-        <button className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition-colors">查询</button>
-      </div>
-
-      <div className="w-full overflow-x-auto border border-gray-100 rounded-lg">
-        <table className="w-full text-left min-w-[1100px]">
-          <thead className="bg-gray-50 text-gray-500">
-            <tr>
-              <th className="px-4 py-3 font-medium">策略</th>
-              <th className="px-4 py-3 font-medium">指标配置</th>
-              <th className="px-4 py-3 font-medium">作用任务</th>
-              <th className="px-4 py-3 font-medium">触发动作</th>
-              <th className="px-4 py-3 font-medium">开启状态</th>
-              <th className="px-4 py-3 font-medium">创建人</th>
-              <th className="px-4 py-3 font-medium">生效时间</th>
-              <th className="px-4 py-3 font-medium text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {strategies.map(s => (
-              <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-5 font-medium">{s.name}</td>
-                <td className="px-4 py-5 text-gray-500">{s.metrics}</td>
-                <td className="px-4 py-5">{s.tasks}</td>
-                <td className="px-4 py-5 text-gray-700">{s.action}</td>
-                <td className="px-4 py-5">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${s.status === '启用' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                    <span className={s.status === '启用' ? 'text-green-600' : 'text-red-500'}>{s.status}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-5">{s.creator}</td>
-                <td className="px-4 py-5 text-gray-400 font-mono text-[12px]">{s.time}</td>
-                <td className="px-4 py-5 text-right whitespace-nowrap">
-                  <div className="flex justify-end gap-4 text-blue-600">
-                    <button className="hover:underline">编辑</button>
-                    <button onClick={() => toggleStatus(s.id)} className="hover:underline">
-                      {s.status === '启用' ? '停用' : '启用'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// --- 任务管理组件 ---
-function TaskManager({ onOpenConfig }) {
-  return (
-    <div className="bg-white p-5 rounded-lg shadow-sm border min-h-full">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-[16px] font-bold">任务管理</h1>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium">
-          <Plus size={18} />
-          创建任务
-        </button>
-      </div>
-
-      <div className="flex gap-8 border-b text-[14px] mb-6">
-        <span className="text-blue-600 font-bold border-b-2 border-blue-600 pb-3 px-1 cursor-pointer">全部任务</span>
-        <span className="text-gray-400 hover:text-gray-600 transition-colors pb-3 px-1 cursor-pointer">我的收藏</span>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {TASKS_DATA.map((task) => (
-          <div key={task.id} className="border border-gray-100 p-4 rounded-xl flex items-center justify-between hover:border-blue-200 hover:shadow-lg transition-all group bg-white">
-            <div className="flex items-center gap-4">
-              <div className="text-gray-300 cursor-pointer hover:text-yellow-400 transition-colors shrink-0">★</div>
-              <div>
-                <div className="text-blue-500 font-mono text-[11px] mb-0.5">{task.id}</div>
-                <div className="text-gray-800 font-bold text-sm truncate pr-4">{task.name}</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-[11px] text-gray-400 whitespace-nowrap">
-                <span className="mr-1">修改人:</span>
-                <span className="text-gray-600">{task.editor}</span>
-              </div>
-              <button 
-                onClick={() => onOpenConfig(task)}
-                className="opacity-0 group-hover:opacity-100 bg-white border border-blue-600 text-blue-600 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-600 hover:text-white transition-all transform group-hover:translate-x-0 translate-x-4"
-              >
-                配置策略
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// --- 策略表单 (重构后的创建/编辑页面) ---
-function StrategyForm({ onCancel, onSave, embedded = false, initialTask = null }) {
-  // 核心显隐逻辑状态
-  const [projectSelection, setProjectSelection] = useState(initialTask ? 'custom' : 'custom');
-  const [taskSelection, setTaskSelection] = useState(initialTask ? 'custom' : 'custom');
-  const [nodeSelection, setNodeSelection] = useState('custom');
-  const [strategyType, setStrategyType] = useState('metrics');
-  const [triggerAction, setTriggerAction] = useState('notification');
-  const [metricsRows, setMetricsRows] = useState([
-    { id: 1, indicator: '合格率', condition: '小于(<)', threshold: '90%', active: '持续', days: '7天' },
-    { id: 2, indicator: '完题数', condition: '大于(>)', threshold: '10 题', active: '即时', days: '' }
-  ]);
-
-  const addRow = () => setMetricsRows([...metricsRows, { id: Date.now(), indicator: '准确率', condition: '小于(<)', threshold: '80%', active: '即时', days: '' }]);
-  const removeRow = (id) => setMetricsRows(metricsRows.filter(r => r.id !== id));
-
-  return (
-    <div className={`space-y-5 ${embedded ? '' : 'max-w-[1200px] mx-auto'}`}>
-      {!embedded && (
-        <div className="flex items-center justify-between mb-2">
-           <h1 className="text-[18px] font-bold">创建风控策略</h1>
-           <div className="flex gap-2">
-              <button onClick={onCancel} className="px-6 py-2 border rounded-lg hover:bg-gray-50 transition-colors">取消</button>
-              <button onClick={onSave} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-100 font-medium">保存并生效</button>
-           </div>
-        </div>
-      )}
-
-      {/* 基础信息 */}
-      <FormSection title="基础信息">
-        <div className="grid grid-cols-2 gap-12">
-          <FormField label="策略命名" required>
-            <input type="text" className="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition-all" placeholder="请输入策略名称" />
-          </FormField>
-          <FormField label="策略 owner" required>
-            <input type="text" className="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500 transition-all" placeholder="请输入负责人" />
-          </FormField>
-        </div>
-      </FormSection>
-
-      {/* 作用范围 (带联动锁定逻辑) */}
-      <FormSection title="作用范围">
-        <div className="space-y-6">
-          <FormField label="项目" required>
-            <div className="flex items-center gap-6">
-              <Radio 
-                label="全部进行中项目" 
-                checked={projectSelection === 'all'} 
-                onChange={() => !initialTask && setProjectSelection('all')} 
-                disabled={!!initialTask}
-              />
-              <Radio 
-                label="自定义项目" 
-                checked={projectSelection === 'custom'} 
-                onChange={() => !initialTask && setProjectSelection('custom')} 
-                disabled={!!initialTask}
-              />
-              {projectSelection === 'custom' && (
-                <div className="flex-1 flex flex-wrap gap-2 ml-2 bg-gray-50 border p-1 rounded-lg">
-                   <Tag label={initialTask ? initialTask.project : "项目 1"} closable={!initialTask} />
-                   {!initialTask && <Tag label="项目 2" closable />}
-                   {!initialTask && <button className="text-gray-400 px-2 text-xs">+</button>}
-                </div>
-              )}
-            </div>
-          </FormField>
-
-          {projectSelection === 'custom' && (
-            <FormField label="任务" required>
-              <div className="flex items-center gap-6">
-                <Radio 
-                  label="全部进行中任务" 
-                  checked={taskSelection === 'all'} 
-                  onChange={() => !initialTask && setTaskSelection('all')} 
-                  disabled={!!initialTask}
-                />
-                <Radio 
-                  label="自定义任务" 
-                  checked={taskSelection === 'custom'} 
-                  onChange={() => !initialTask && setTaskSelection('custom')} 
-                  disabled={!!initialTask}
-                />
-                {taskSelection === 'custom' && (
-                  <div className="flex-1 flex flex-wrap gap-2 ml-2 bg-gray-50 border p-1 rounded-lg">
-                    <Tag label={initialTask ? initialTask.name : "任务 1"} closable={!initialTask} />
-                    {!initialTask && <Tag label="任务 2" closable />}
-                    {!initialTask && <button className="text-gray-400 px-2 text-xs">+</button>}
-                  </div>
-                )}
-              </div>
-            </FormField>
-          )}
-
-          {projectSelection === 'custom' && taskSelection === 'custom' && (
-            <FormField label="任务节点" required>
-              <div className="space-y-4">
-                <div className="flex gap-6">
-                  <Radio 
-                    label="全部节点" 
-                    checked={nodeSelection === 'all'} 
-                    onChange={() => setNodeSelection('all')} 
-                  />
-                  <Radio 
-                    label="自定义节点" 
-                    checked={nodeSelection === 'custom'} 
-                    onChange={() => setNodeSelection('custom')} 
-                  />
-                </div>
-                {nodeSelection === 'custom' && (
-                  <div className="pl-6 space-y-3 pt-2">
-                    <div className="flex items-center gap-6 text-gray-500">
-                      <span className="w-16 italic font-medium text-xs">任务 1</span>
-                      <Checkbox label="标注" defaultChecked />
-                      <Checkbox label="质检" />
-                      <Checkbox label="抽检" />
+                <div id="nav-task" onclick="showTaskManager()" class="nav-item px-4 py-2 hover:bg-gray-50 flex items-center justify-between text-gray-700 cursor-pointer transition-colors">
+                    <div class="flex items-center gap-2.5">
+                        <i data-lucide="clipboard-list" class="w-4 h-4 opacity-70"></i>
+                        <span class="font-medium">任务管理</span>
                     </div>
-                  </div>
-                )}
-              </div>
-            </FormField>
-          )}
-        </div>
-      </FormSection>
-
-      {/* 策略配置 (核心表单复刻) */}
-      <FormSection title="策略配置">
-        <div className="space-y-8">
-          <FormField label="策略选择" required>
-            <div className="flex gap-8">
-              <Radio label="限制准确率过低报警策略" checked={strategyType === 'metrics'} onChange={() => setStrategyType('metrics')} />
-              <Radio label="提交过快" checked={strategyType === 'fast'} onChange={() => setStrategyType('fast')} />
-              <Radio label="自定义" checked={strategyType === 'custom'} onChange={() => setStrategyType('custom')} />
-            </div>
-          </FormField>
-
-          <FormField label="策略间关系" required>
-            <div className="flex gap-6">
-              <Radio label="符合以下全部(AND)" />
-              <Radio label="符合任一(OR)" defaultChecked />
-            </div>
-          </FormField>
-
-          {/* 指标配置列表 */}
-          <div className="space-y-3">
-            {metricsRows.map((row, idx) => (
-              <div key={row.id} className="flex items-center gap-3 bg-[#F8F9FB] p-4 rounded-xl border border-dashed border-gray-200 shadow-sm transition-all hover:border-blue-200">
-                <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[12px] font-bold shrink-0">{idx + 1}</div>
-                <div className="flex-1 grid grid-cols-4 gap-4">
-                   <MetricSubField label="指标项 (从指标库选择)" value={row.indicator} />
-                   <MetricSubField label="条件关系" value={row.condition} />
-                   <MetricSubField label="阈值" value={row.threshold} input />
-                   <MetricSubField label="触发生效" effect={row.active} days={row.days} />
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-40"></i>
                 </div>
-                <button onClick={() => removeRow(row.id)} className="text-gray-300 hover:text-red-500 p-2 transition-colors shrink-0">
-                   <Trash2 size={18} />
-                </button>
-              </div>
-            ))}
-            <button onClick={addRow} className="flex items-center gap-2 text-blue-600 hover:bg-blue-50 font-bold px-3 py-2 rounded-lg transition-all text-xs">
-               <Plus size={16} /> 添加策略
-            </button>
-          </div>
-        </div>
-      </FormSection>
 
-      {/* 触发动作 */}
-      <FormSection title="触发动作">
-        <div className="space-y-6">
-          <div className="flex gap-8">
-             <Radio label="拉黑（限制领题）" checked={triggerAction === 'block_pick'} onChange={() => setTriggerAction('block_pick')} />
-             <Radio label="拉黑（回收任务权限）" checked={triggerAction === 'block_auth'} onChange={() => setTriggerAction('block_auth')} />
-             <Radio label="仅通知" checked={triggerAction === 'notification'} onChange={() => setTriggerAction('notification')} />
-          </div>
+                <div class="mt-1">
+                    <div id="nav-risk-parent" onclick="toggleRiskMenu()" class="px-4 py-2 hover:bg-gray-50 flex items-center justify-between cursor-pointer group">
+                        <div class="flex items-center gap-2.5 text-gray-700" id="risk-parent-text">
+                            <i data-lucide="shield-alert" class="w-4 h-4 opacity-70"></i>
+                            <span class="font-medium">风险监控</span>
+                        </div>
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5 opacity-40 transition-transform" id="risk-arrow"></i>
+                    </div>
+                    <div id="sub-menu-risk" class="bg-white">
+                        <div id="nav-strategy" onclick="showStrategyBoard()" class="pl-10 pr-4 py-2 text-gray-500 hover:text-blue-600 cursor-pointer transition-colors">策略配置</div>
+                        <div id="nav-risk-dashboard" onclick="showRiskDashboard()" class="pl-10 pr-4 py-2 text-gray-500 hover:text-blue-600 cursor-pointer transition-colors">风险看板</div>
+                    </div>
+                </div>
+            </nav>
+        </aside>
 
-          {triggerAction === 'notification' && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
-              <FormField label="通知标题" required>
-                <input type="text" className="w-full border rounded-lg px-3 py-2 outline-none focus:border-blue-500" placeholder="请输入通知标题" />
-              </FormField>
-              <FormField label="通知内容" required>
-                <textarea className="w-full border rounded-lg px-3 py-2 outline-none h-24 resize-none focus:border-blue-500" placeholder="请输入具体话术内容..."></textarea>
-              </FormField>
+        <!-- 主体 -->
+        <main class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+            <header class="h-12 bg-white border-b flex items-center justify-between px-6 shrink-0 z-10">
+                <div id="breadcrumb" class="text-gray-400 text-[12px] font-medium tracking-wide">风险监控 / 风险看板</div>
+                <div class="flex items-center gap-5">
+                    <button class="text-blue-600 border border-blue-600 px-2 py-0.5 rounded text-[11px] font-bold hover:bg-blue-50 transition-all">切换端</button>
+                    <div class="flex items-center gap-4 text-gray-400">
+                        <i data-lucide="help-circle" class="w-[18px] h-[18px] cursor-pointer hover:text-blue-600"></i>
+                        <i data-lucide="mail" class="w-[18px] h-[18px] cursor-pointer hover:text-blue-600"></i>
+                        <div class="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200 text-[10px] shadow-sm">EC</div>
+                    </div>
+                </div>
+            </header>
+
+            <div id="main-content" class="flex-1 overflow-auto p-5 scroll-smooth bg-[#F5F7FA]">
+                <!-- 内容区域由 JS 动态生成 -->
             </div>
-          )}
+        </main>
+    </div>
+
+    <!-- 侧边配置抽屉 -->
+    <div id="drawer" class="fixed inset-0 z-50 flex justify-end hide">
+        <div class="absolute inset-0 bg-black/30 backdrop-blur-[2px]" onclick="closeDrawer()"></div>
+        <div class="relative w-full max-w-[850px] h-full bg-white shadow-2xl flex flex-col slide-in">
+            <div class="p-4 border-b flex items-center justify-between shrink-0 bg-white">
+                <div class="flex items-center gap-2">
+                    <div class="w-1 h-4 bg-blue-600 rounded-full"></div>
+                    <h2 class="font-bold text-[16px]">策略配置</h2>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="closeDrawer()" class="px-4 py-1.5 border rounded-lg hover:bg-gray-50 transition-colors font-medium">取消</button>
+                    <button onclick="closeDrawer()" class="px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-100 font-bold text-sm">保存并生效</button>
+                </div>
+            </div>
+            <div id="drawer-body" class="flex-1 overflow-y-auto bg-[#F5F7FA] p-6"></div>
         </div>
-      </FormSection>
-
-      {/* 固定底部操作栏 (仅非内嵌模式显示) */}
-      {!embedded && (
-        <div className="h-20 shrink-0"></div> 
-      )}
     </div>
-  );
-}
 
-// --- 通用辅助组件 ---
-
-function FormSection({ title, children }) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-      <h2 className="text-[14px] font-black mb-6 text-gray-800 flex items-center gap-2">
-        <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function FormField({ label, required, children }) {
-  return (
-    <div className="space-y-2">
-      <label className="text-[13px] font-bold text-gray-500 flex items-center gap-1">
-        {required && <span className="text-red-500 font-black">*</span>}
-        {label}
-      </label>
-      <div className="w-full">{children}</div>
-    </div>
-  );
-}
-
-function MetricSubField({ label, value, input, effect, days }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider pl-0.5">{label}</div>
-      {effect ? (
-        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-md p-1">
-           <button className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all ${effect === '即时' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>即时</button>
-           <button className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all ${effect === '持续' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>持续</button>
-           {effect === '持续' && <input type="text" className="w-12 border-b text-center text-[10px] ml-1 outline-none" defaultValue={days} />}
-           <HelpCircle size={12} className="text-gray-300 ml-auto mr-1" />
+    <!-- 风险看板拉黑弹窗 -->
+    <div id="block-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm hide">
+        <div class="absolute inset-0" onclick="closeBlockModal()"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 fade-in border border-gray-100">
+            <div class="flex items-center gap-3 text-orange-500 mb-4">
+               <i data-lucide="alert-circle" class="w-6 h-6"></i>
+               <h3 class="text-lg font-bold text-gray-900">执行拉黑操作</h3>
+            </div>
+            <p id="block-user-info" class="text-gray-500 mb-6 leading-relaxed"></p>
+            <div class="space-y-2 mb-8">
+                <button onclick="handleBlockAction('限制领题')" class="w-full text-left p-4 border rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center justify-between group">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-gray-800">限制领题</span>
+                        <span class="text-[11px] text-gray-400">用户将无法在该任务下领取新题</span>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-gray-300 group-hover:text-blue-500"></i>
+                </button>
+                <button onclick="handleBlockAction('回收权限')" class="w-full text-left p-4 border rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all flex items-center justify-between group">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-gray-800">回收权限</span>
+                        <span class="text-[11px] text-gray-400">强制回收该用户的所有操作权限</span>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-[18px] h-[18px] text-gray-300 group-hover:text-blue-500"></i>
+                </button>
+            </div>
+            <div class="flex justify-end">
+                <button onclick="closeBlockModal()" class="px-6 py-2 text-gray-400 hover:text-gray-600 font-bold transition-colors">取消</button>
+            </div>
         </div>
-      ) : input ? (
-        <input type="text" defaultValue={value} className="w-full border border-gray-200 bg-white rounded-md px-2 py-1.5 text-xs outline-none focus:border-blue-400" />
-      ) : (
-        <div className="relative group">
-          <select className="w-full border border-gray-200 bg-white rounded-md px-2 py-1.5 text-xs outline-none appearance-none cursor-pointer group-hover:border-blue-400">
-            <option>{value}</option>
-          </select>
-          <ChevronDown size={14} className="absolute right-2 top-2 text-gray-300 pointer-events-none" />
-        </div>
-      )}
     </div>
-  );
-}
 
-function Radio({ label, checked, onChange, disabled }) {
-  return (
-    <label className={`flex items-center gap-2 cursor-pointer group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${checked ? 'border-blue-600' : 'border-gray-300 group-hover:border-blue-400'}`}>
-        {checked && <div className="w-2 h-2 rounded-full bg-blue-600 animate-in zoom-in-50"></div>}
-      </div>
-      <input type="radio" className="hidden" checked={checked} onChange={onChange} disabled={disabled} />
-      <span className={`text-[13px] font-medium transition-colors ${checked ? 'text-gray-900 font-bold' : 'text-gray-500 group-hover:text-gray-700'}`}>{label}</span>
-    </label>
-  );
-}
+    <script>
+        // --- 模拟数据 ---
+        let riskData = [
+            { id: 1, project: '项目1', task: '任务1', nodes: '标注、质检', name: '张三', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', isBlocked: false },
+            { id: 2, project: '项目1', task: '任务1', nodes: '标注、质检', name: '李四', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', isBlocked: false },
+            { id: 3, project: '项目1', task: '任务2', nodes: '质检', name: '王五', rule: '"准确率 < 70% AND 领题数 > 100"', action: '仅通知', time: '2025.2.12', isBlocked: false },
+            { id: 4, project: '项目2', task: '任务1', nodes: '标注、质检', name: '赵六', rule: '"准确率 < 70% AND 领题数 > 100"', action: '拉黑（限制领题）', time: '2025.2.12', isBlocked: true },
+        ];
 
-function Checkbox({ label, defaultChecked }) {
-  return (
-    <label className="flex items-center gap-2.5 cursor-pointer group">
-      <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-0 cursor-pointer" defaultChecked={defaultChecked} />
-      <span className="text-[13px] text-gray-600 group-hover:text-gray-900 font-medium">{label}</span>
-    </label>
-  );
-}
+        let strategyData = [
+            { id: 1, name: '限制准确率过低报警策略', metrics: '领题数>20 AND 准确率<10%', tasks: '任务1、任务2', action: '拉黑（限制领题）', status: '启用', creator: '臧娅婕', time: '2026.2.13' },
+            { id: 2, name: '提交过快', metrics: '押后率>10%', tasks: '任务1', action: '拉黑（回收权限）', status: '停用', creator: '臧娅婕', time: '2026.1.13' },
+        ];
 
-function Tag({ label, closable }) {
-  return (
-    <div className="flex items-center gap-2 bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-[12px] font-bold border border-blue-100 transition-colors hover:bg-blue-100/50">
-      <span>{label}</span>
-      {closable && <X size={12} className="cursor-pointer hover:text-red-500" />}
-    </div>
-  );
-}
+        const TASKS = [
+            { id: '7602479166420913983', name: '正式-智能化全量券JM-FZ', project: '项目1', editor: 'mofei.murphy' },
+            { id: '7611023842630930212', name: 'multi_dim_data_partv2_202601', project: '项目2', editor: 'wuwenhui.ihpb' },
+            { id: '7524539180375101222', name: '正式-智能化全量券JF-SKU采集', project: '项目1', editor: 'meiyu' },
+            { id: '7577390228706217755', name: '【正式】BR1-【全量】将筷子等放到拼图的分割盒里', project: '项目3', editor: 'sudo123' },
+        ];
 
-function FilterInput({ label, placeholder }) {
-  return (
-    <div className="flex flex-col gap-1 min-w-[180px]">
-      <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider pl-1">{label}</span>
-      <input 
-        type="text" 
-        placeholder={placeholder}
-        className="border border-gray-200 bg-white rounded-lg px-3 py-2 text-[12px] outline-none focus:border-blue-500 transition-all shadow-sm"
-      />
-    </div>
-  );
-}
+        let currentBlockingId = null;
+        let isRiskExpanded = true;
+        window.metricRowsData = [];
+
+        // --- 全局交互函数 (核心修正部分) ---
+
+        window.safeIcons = function() { if (window.lucide) lucide.createIcons(); };
+
+        window.updateActiveMenu = function(id) {
+            document.querySelectorAll('.nav-item, #sub-menu-risk div').forEach(el => {
+                el.classList.remove('active-menu-item', 'text-blue-600', 'bg-blue-50/50', 'font-medium', 'border-r-2', 'border-blue-600');
+            });
+            document.getElementById('risk-parent-text').classList.remove('text-blue-600');
+            const target = document.getElementById(id);
+            if (target) {
+                if (id.startsWith('nav-risk') || id === 'nav-strategy') {
+                    target.classList.add('text-blue-600', 'bg-blue-50/50', 'font-medium', 'border-r-2', 'border-blue-600');
+                    document.getElementById('risk-parent-text').classList.add('text-blue-600');
+                } else {
+                    target.classList.add('active-menu-item');
+                }
+            }
+        };
+
+        window.toggleRiskMenu = function() {
+            const sub = document.getElementById('sub-menu-risk');
+            const arrow = document.getElementById('risk-arrow');
+            isRiskExpanded = !isRiskExpanded;
+            if (isRiskExpanded) {
+                sub.classList.remove('hide');
+                arrow.classList.remove('-rotate-90');
+            } else {
+                sub.classList.add('hide');
+                arrow.classList.add('-rotate-90');
+            }
+        };
+
+        window.showRiskDashboard = function() {
+            updateActiveMenu('nav-risk-dashboard');
+            document.getElementById('breadcrumb').innerText = '风险监控 / 风险看板';
+            const html = `
+                <div class="bg-white p-6 rounded-xl shadow-sm border fade-in h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-6">
+                        <h1 class="text-base font-bold text-gray-900">风险看板</h1>
+                        <div class="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100 shadow-sm">
+                            <span class="text-gray-400 font-medium text-xs">今日风控人数</span>
+                            <span class="text-xl font-black text-blue-600">30</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-end gap-4 mb-8 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                        <div class="flex flex-col gap-1.5 min-w-[180px]"><span class="text-[11px] font-bold text-gray-400">项目名称/ID</span><input type="text" placeholder="请输入" class="border rounded-lg px-3 py-2 text-xs outline-none focus:border-blue-500"></div>
+                        <div class="flex flex-col gap-1.5 min-w-[180px]"><span class="text-[11px] font-bold text-gray-400">姓名</span><input type="text" placeholder="请输入" class="border rounded-lg px-3 py-2 text-xs outline-none focus:border-blue-500"></div>
+                        <button class="bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-lg shadow-blue-100 transition-all">查询</button>
+                    </div>
+                    <div class="overflow-x-auto border rounded-xl border-gray-100 flex-1">
+                        <table class="w-full text-left min-w-[1100px]">
+                            <thead class="bg-gray-50 text-gray-500 font-bold sticky top-0 z-10 border-b">
+                                <tr>
+                                    <th class="px-4 py-3.5">项目名称/ID</th><th class="px-4 py-3.5">任务名称/ID</th><th class="px-4 py-3.5">节点</th><th class="px-4 py-3.5">姓名</th>
+                                    <th class="px-4 py-3.5">命中规则</th><th class="px-4 py-3.5">执行动作</th><th class="px-4 py-3.5">风控时间</th><th class="px-4 py-3.5">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y overflow-y-auto">
+                                ${riskData.map(r => `
+                                    <tr class="hover:bg-blue-50/10 transition-colors">
+                                        <td class="px-4 py-4 font-medium text-gray-900">${r.project}</td>
+                                        <td class="px-4 py-4 text-gray-600">${r.task}</td>
+                                        <td class="px-4 py-4 text-gray-500 text-[12px]">${r.nodes}</td>
+                                        <td class="px-4 py-4 font-bold text-gray-800">${r.name}</td>
+                                        <td class="px-4 py-4 text-gray-500 italic max-w-[200px] truncate text-[12px] font-mono" title="${r.rule}">${r.rule}</td>
+                                        <td class="px-4 py-4"><span class="${r.isBlocked ? 'text-orange-600 font-bold bg-orange-50 px-2 py-0.5 rounded border border-orange-100 text-[11px]' : 'text-gray-400 font-medium'}">${r.action}</span></td>
+                                        <td class="px-4 py-4 text-gray-400 font-mono text-[11px]">${r.time}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap">
+                                            <div class="flex gap-4 text-blue-600 font-bold">
+                                                ${r.isBlocked ? `<button onclick="unblockUser(${r.id})" class="underline decoration-blue-100 underline-offset-4 hover:text-blue-800">解除黑名单</button>` : `<button onclick="openBlockModal(${r.id}, '${r.name}')" class="underline decoration-blue-100 underline-offset-4 hover:text-blue-800">拉黑</button>`}
+                                                <button class="underline decoration-blue-100 underline-offset-4 hover:text-blue-800">操作记录</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+            safeIcons();
+        };
+
+        window.showStrategyBoard = function() {
+            updateActiveMenu('nav-strategy');
+            document.getElementById('breadcrumb').innerText = '风险监控 / 策略配置';
+            const html = `
+                <div class="bg-white p-6 rounded-xl shadow-sm border fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h1 class="text-base font-bold text-gray-900">策略配置</h1>
+                        <button onclick="showCreateStrategy()" class="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 shadow-lg shadow-blue-100 font-bold text-sm">
+                            <i data-lucide="plus" class="w-4 h-4"></i> 创建风控策略
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto border rounded-xl border-gray-100">
+                        <table class="w-full text-left min-w-[1100px]">
+                            <thead class="bg-gray-50 text-gray-500 font-bold border-b">
+                                <tr>
+                                    <th class="px-4 py-4">策略名称</th><th class="px-4 py-4">指标配置</th><th class="px-4 py-4">作用任务</th><th class="px-4 py-4">触发动作</th>
+                                    <th class="px-4 py-4">开启状态</th><th class="px-4 py-4">创建人</th><th class="px-4 py-4">生效时间</th><th class="px-4 py-4 text-right">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                ${strategyData.map(s => `
+                                    <tr class="hover:bg-blue-50/10 transition-colors">
+                                        <td class="px-4 py-5 font-bold text-gray-900">${s.name}</td>
+                                        <td class="px-4 py-5 text-gray-500 text-[12px]">${s.metrics}</td>
+                                        <td class="px-4 py-5 text-gray-600">${s.tasks}</td>
+                                        <td class="px-4 py-5 font-medium">${s.action}</td>
+                                        <td class="px-4 py-5">
+                                            <div class="flex items-center gap-1.5 font-bold">
+                                                <span class="w-2 h-2 rounded-full ${s.status === '启用' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}"></span>
+                                                <span class="${s.status === '启用' ? 'text-green-600' : 'text-red-500'}">${s.status}</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-5 text-gray-600">${s.creator}</td>
+                                        <td class="px-4 py-5 text-gray-400 font-mono text-[11px]">${s.time}</td>
+                                        <td class="px-4 py-5 text-right whitespace-nowrap text-blue-600 font-bold">
+                                            <button class="hover:text-blue-800 mr-5">编辑</button>
+                                            <button onclick="toggleStatus(${s.id})" class="${s.status === '启用' ? 'text-red-500 hover:text-red-700' : 'text-blue-600 hover:text-blue-800'} transition-colors">
+                                                ${s.status === '启用' ? '停用' : '启用'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+            safeIcons();
+        };
+
+        window.showTaskManager = function() {
+            updateActiveMenu('nav-task');
+            document.getElementById('breadcrumb').innerText = '任务管理 / 任务列表';
+            const html = `
+                <div class="bg-white p-6 rounded-xl shadow-sm border fade-in h-full flex flex-col">
+                    <h1 class="text-base font-bold text-gray-900 mb-6">任务管理</h1>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 overflow-auto">
+                        ${TASKS.map(t => `
+                            <div class="border border-gray-100 p-5 rounded-2xl flex items-center justify-between hover:border-blue-200 hover:shadow-xl transition-all group bg-white">
+                                <div class="flex items-center gap-4 min-w-0">
+                                    <div class="text-gray-300 hover:text-yellow-400 transition-colors shrink-0 font-bold text-lg">★</div>
+                                    <div class="min-w-0">
+                                        <div class="text-blue-500 font-mono text-[10px] uppercase tracking-wider mb-0.5">${t.id}</div>
+                                        <div class="text-gray-900 font-black text-sm truncate pr-2">${t.name}</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6 shrink-0">
+                                    <button onclick='openConfigDrawer(${JSON.stringify(t)})' 
+                                        class="opacity-0 group-hover:opacity-100 bg-white border border-blue-600 text-blue-600 px-4 py-1.5 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all transform group-hover:translate-x-0 translate-x-4 shadow-sm"
+                                    >配置策略</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            document.getElementById('main-content').innerHTML = html;
+            safeIcons();
+        };
+
+        window.showCreateStrategy = function() {
+            document.getElementById('breadcrumb').innerText = '风险监控 / 创建策略';
+            renderStrategyForm('main-content', false);
+            updateActiveMenu('nav-strategy');
+        };
+
+        window.renderStrategyForm = function(containerId, isEmbedded = false, lockTask = null) {
+            const html = `
+                <div class="space-y-4 fade-in max-w-5xl mx-auto pb-20">
+                    ${!isEmbedded ? `
+                        <div class="flex items-center justify-between mb-4">
+                           <h1 class="text-xl font-black text-gray-900">创建风控策略</h1>
+                           <div class="flex gap-2">
+                              <button onclick="showStrategyBoard()" class="px-6 py-2 text-gray-500 hover:bg-white rounded-lg transition-colors font-bold">取消</button>
+                              <button onclick="showStrategyBoard()" class="px-8 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-black shadow-lg shadow-blue-200 active:scale-95 transition-all">确认并保存</button>
+                           </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- 基础信息 -->
+                    <div class="strategy-card">
+                        <div class="text-gray-900 font-black mb-8 flex items-center gap-3"><div class="w-1.5 h-6 bg-blue-600 rounded-full"></div>基础信息设置</div>
+                        <div class="grid grid-cols-2 gap-12">
+                            <div class="space-y-2.5">
+                                <label class="text-[13px] font-bold text-gray-500 block"><span class="text-red-500 mr-1">*</span>策略命名</label>
+                                <input type="text" placeholder="请输入策略名称" class="w-full border border-gray-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition-all focus:ring-4 focus:ring-blue-50/50">
+                            </div>
+                            <div class="space-y-2.5">
+                                <label class="text-[13px] font-bold text-gray-500 block"><span class="text-red-500 mr-1">*</span>策略负责人 (Owner)</label>
+                                <input type="text" placeholder="请输入姓名" class="w-full border border-gray-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition-all focus:ring-4 focus:ring-blue-50/50">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 作用范围 (带全联动逻辑) -->
+                    <div class="strategy-card">
+                        <div class="text-gray-900 font-black mb-8 flex items-center gap-3"><div class="w-1.5 h-6 bg-blue-600 rounded-full"></div>风控作用范围配置</div>
+                        <div class="space-y-8">
+                            <!-- 项目 -->
+                            <div class="flex items-center gap-12">
+                                <span class="text-[13px] font-bold text-gray-500 w-24 flex-shrink-0"><span class="text-red-500 mr-1">*</span>关联项目</span>
+                                <div class="flex items-center gap-8">
+                                    <label class="flex items-center gap-2.5 cursor-pointer group ${lockTask ? 'opacity-30 pointer-events-none' : ''}">
+                                        <input type="radio" name="p" value="all" onchange="handleScope联动()" class="w-4 h-4 accent-blue-600" ${!lockTask ? '' : ''}>
+                                        <span class="text-[13px] font-medium text-gray-600">全部进行中项目</span>
+                                    </label>
+                                    <label class="flex items-center gap-2.5 cursor-pointer group ${lockTask ? 'pointer-events-none' : ''}">
+                                        <input type="radio" name="p" value="custom" checked onchange="handleScope联动()" class="w-4 h-4 accent-blue-600">
+                                        <span class="text-[13px] font-black text-gray-900">自定义选择项目</span>
+                                    </label>
+                                    <div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-100 flex items-center gap-2">
+                                        ${lockTask ? '<i data-lucide="lock" class="w-3.5 h-3.5"></i>' : ''}
+                                        <span>${lockTask ? lockTask.project : '示例标注项目_A'}</span>
+                                        ${!lockTask ? '<i data-lucide="x" class="w-3.5 h-3.5 cursor-pointer hover:text-red-500"></i>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 任务行 (受项目选择控制) -->
+                            <div id="row-task" class="flex items-center gap-12 transition-all duration-300">
+                                <span class="text-[13px] font-bold text-gray-500 w-24 flex-shrink-0"><span class="text-red-500 mr-1">*</span>关联任务</span>
+                                <div class="flex items-center gap-8">
+                                    <label class="flex items-center gap-2.5 cursor-pointer group ${lockTask ? 'opacity-30 pointer-events-none' : ''}">
+                                        <input type="radio" name="t" value="all" onchange="handleScope联动()" class="w-4 h-4 accent-blue-600">
+                                        <span class="text-[13px] font-medium text-gray-600">全部进行中任务</span>
+                                    </label>
+                                    <label class="flex items-center gap-2.5 cursor-pointer group ${lockTask ? 'pointer-events-none' : ''}">
+                                        <input type="radio" name="t" value="custom" checked onchange="handleScope联动()" class="w-4 h-4 accent-blue-600">
+                                        <span class="text-[13px] font-black text-gray-900">自定义选择任务</span>
+                                    </label>
+                                    <div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-100 flex items-center gap-2 max-w-[200px] truncate">
+                                        ${lockTask ? '<i data-lucide="lock" class="w-3.5 h-3.5"></i>' : ''}
+                                        <span>${lockTask ? lockTask.name : '正式标注生产任务'}</span>
+                                        ${!lockTask ? '<i data-lucide="x" class="w-3.5 h-3.5 cursor-pointer hover:text-red-500"></i>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 环节行 (受任务选择控制) -->
+                            <div id="row-node" class="flex items-start gap-12 transition-all duration-300">
+                                <span class="text-[13px] font-bold text-gray-500 w-24 flex-shrink-0 pt-1"><span class="text-red-500 mr-1">*</span>生效节点</span>
+                                <div class="flex-1 space-y-4">
+                                    <div class="flex gap-10">
+                                        <label class="flex items-center gap-2.5 cursor-pointer"><input type="radio" name="n" value="all" onchange="handleScope联动()" class="w-4 h-4 accent-blue-600"> <span>全部节点环节</span></label>
+                                        <label class="flex items-center gap-2.5 cursor-pointer"><input type="radio" name="n" value="custom" checked onchange="handleScope联动()" class="w-4 h-4 accent-blue-600"> <span class="font-black text-gray-900">自定义指定节点</span></label>
+                                    </div>
+                                    <div id="node-check-area" class="pl-8 py-5 border-l-2 border-blue-50 space-y-5 bg-blue-50/20 rounded-r-2xl transition-all">
+                                        <div class="flex items-center gap-8">
+                                            <span class="text-[11px] font-black text-blue-400 w-20 uppercase tracking-widest decoration-blue-100 decoration-2 underline">标注环节组</span>
+                                            <div class="flex gap-8">
+                                                <label class="flex items-center gap-2 cursor-pointer font-bold"><input type="checkbox" checked class="w-4 h-4 rounded accent-blue-600"> 标注</label>
+                                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 rounded accent-blue-600"> 质检</label>
+                                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="w-4 h-4 rounded accent-blue-600"> 仲裁抽查</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 逻辑规则配置 -->
+                    <div class="strategy-card">
+                        <div class="text-gray-900 font-black mb-8 flex items-center gap-3"><div class="w-1.5 h-6 bg-blue-600 rounded-full"></div>策略逻辑配置规则</div>
+                        <div class="space-y-8">
+                             <div class="flex items-center gap-8">
+                                <span class="text-[13px] font-bold text-gray-500 w-24 flex-shrink-0"><span class="text-red-500 mr-1">*</span>策略选择</span>
+                                <div class="flex flex-wrap gap-8">
+                                    <label class="flex items-center gap-2.5 cursor-pointer"><input type="radio" name="st" value="metrics" onchange="handleStrategyLogicChange()" checked class="w-4 h-4 accent-blue-600"> <span class="text-gray-900 font-black">限制准确率过低报警策略</span></label>
+                                    <label class="flex items-center gap-2.5 cursor-pointer text-gray-400"><input type="radio" name="st" value="fast" onchange="handleStrategyLogicChange()" class="w-4 h-4 accent-blue-600"> <span class="font-medium">提交速度异常监控</span></label>
+                                </div>
+                            </div>
+
+                            <div id="metrics-editor" class="bg-[#F8F9FB] rounded-2xl p-6 border border-gray-100 space-y-4">
+                                <div id="metrics-rows-container" class="space-y-4"></div>
+                                <button onclick="addMetricRow()" class="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-blue-600 font-black hover:bg-blue-50 transition-all flex items-center justify-center gap-2 group">
+                                    <i data-lucide="plus-circle" class="w-5 h-5 group-hover:scale-110 transition-transform"></i> 添加判定的指标条目
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 触发动作 -->
+                    <div class="strategy-card">
+                        <div class="text-gray-900 font-black mb-8 flex items-center gap-3"><div class="w-1.5 h-6 bg-blue-600 rounded-full"></div>触发执行动作设置</div>
+                        <div class="space-y-8">
+                            <div class="flex flex-wrap gap-12">
+                                <label class="flex items-center gap-3 cursor-pointer"><input type="radio" name="act" value="block" onchange="handleTriggerActionChange()" class="w-4 h-4 accent-blue-600"> <span class="text-gray-500 font-medium">拉黑（限制领题/权限）</span></label>
+                                <label class="flex items-center gap-3 cursor-pointer"><input type="radio" name="act" value="notify" onchange="handleTriggerActionChange()" checked class="w-4 h-4 accent-blue-600"> <span class="text-gray-900 font-black">异常预警（仅通知）</span></label>
+                            </div>
+                            <!-- 及联展示 -->
+                            <div id="notify-details" class="p-6 bg-blue-50/30 rounded-2xl border border-blue-50 space-y-5 fade-in">
+                                <div class="space-y-2.5">
+                                    <label class="text-[13px] font-bold text-gray-500 block"><span class="text-red-500 mr-1">*</span>系统通知标题</label>
+                                    <input type="text" placeholder="请输入通知主题" class="w-full border border-gray-200 rounded-xl px-4 py-2.5 outline-none focus:border-blue-500 transition-all bg-white">
+                                </div>
+                                <div class="space-y-2.5">
+                                    <label class="text-[13px] font-bold text-gray-500 block"><span class="text-red-500 mr-1">*</span>下发话术内容</label>
+                                    <textarea placeholder="请编辑下发给用户的通知内容..." class="w-full border border-gray-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition-all h-32 resize-none bg-white text-sm"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById(containerId).innerHTML = html;
+            
+            // 初始化行数据
+            window.metricRowsData = [
+                { metric: '准确率', condition: '小于(<)', value: '90%', type: '持续', time: '7天' },
+                { metric: '完题数', condition: '大于(>)', value: '50题', type: '即时', time: '' }
+            ];
+            renderMetricRows();
+            handleScope联动(); // 初次加载计算可见性
+            handleTriggerActionChange();
+            safeIcons();
+        };
+
+        // --- 联动逻辑定义 ---
+
+        window.handleScope联动 = function() {
+            const projVal = document.querySelector('input[name="p"]:checked')?.value;
+            const taskVal = document.querySelector('input[name="t"]:checked')?.value;
+            const nodeVal = document.querySelector('input[name="n"]:checked')?.value;
+
+            const rowTask = document.getElementById('row-task');
+            const rowNode = document.getElementById('row-node');
+            const nodeArea = document.getElementById('node-check-area');
+
+            if (projVal === 'all') {
+                rowTask.classList.add('hide');
+                rowNode.classList.add('hide');
+            } else {
+                rowTask.classList.remove('hide');
+                if (taskVal === 'all') {
+                    rowNode.classList.add('hide');
+                } else {
+                    rowNode.classList.remove('hide');
+                    if (nodeVal === 'all') nodeArea.classList.add('hide');
+                    else nodeArea.classList.remove('hide');
+                }
+            }
+        };
+
+        window.handleStrategyLogicChange = function() {
+            const opt = document.querySelector('input[name="st"]:checked').value;
+            const editor = document.getElementById('metrics-editor');
+            if (opt === 'metrics') editor.classList.remove('hide');
+            else editor.classList.add('hide');
+        };
+
+        window.handleTriggerActionChange = function() {
+            const act = document.querySelector('input[name="act"]:checked').value;
+            const details = document.getElementById('notify-details');
+            if (act === 'notify') details.classList.remove('hide');
+            else details.classList.add('hide');
+        };
+
+        window.renderMetricRows = function() {
+            const container = document.getElementById('metrics-rows-container');
+            if (!container) return;
+            container.innerHTML = window.metricRowsData.map((row, idx) => `
+                <div class="metric-row fade-in">
+                    <div class="index-circle">${idx + 1}</div>
+                    <div class="flex-1 grid grid-cols-4 gap-4">
+                        <div class="space-y-1"><div class="text-[10px] text-gray-400 font-bold uppercase">监控指标项</div><select class="w-full border rounded-lg p-2 text-xs font-bold outline-none bg-white"><option>${row.metric}</option></select></div>
+                        <div class="space-y-1"><div class="text-[10px] text-gray-400 font-bold uppercase">判定条件</div><select class="w-full border rounded-lg p-2 text-xs font-bold outline-none bg-white"><option>${row.condition}</option></select></div>
+                        <div class="space-y-1"><div class="text-[10px] text-gray-400 font-bold uppercase">阈值设定</div><input type="text" value="${row.value}" class="w-full border rounded-lg p-2 text-xs font-bold outline-none"></div>
+                        <div class="space-y-1"><div class="text-[10px] text-gray-400 font-bold uppercase">生效周期</div>
+                            <div class="flex items-center gap-1 bg-white border rounded-lg p-1">
+                                <button onclick="updateRowType(${idx}, '即时')" class="toggle-btn flex-1 ${row.type === '即时' ? 'active' : 'text-gray-400'}">即时</button>
+                                <button onclick="updateRowType(${idx}, '持续')" class="toggle-btn flex-1 ${row.type === '持续' ? 'active' : 'text-gray-400'}">持续</button>
+                                ${row.type === '持续' ? `<input type="text" value="${row.time || '7天'}" class="w-10 border-b border-blue-200 text-center text-[10px] font-bold outline-none">` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="removeMetricRow(${idx})" class="text-gray-300 hover:text-red-500 transition-colors p-2"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                </div>
+            `).join('');
+            safeIcons();
+        };
+
+        window.addMetricRow = function() {
+            window.metricRowsData.push({ metric: '准确率', condition: '小于(<)', value: '80%', type: '即时', time: '' });
+            renderMetricRows();
+        };
+
+        window.removeMetricRow = function(idx) {
+            window.metricRowsData.splice(idx, 1);
+            renderMetricRows();
+        };
+
+        window.updateRowType = function(idx, type) {
+            window.metricRowsData[idx].type = type;
+            renderMetricRows();
+        };
+
+        // --- 弹窗与抽屉控制 ---
+
+        window.openBlockModal = function(id, name) {
+            currentBlockingId = id;
+            document.getElementById('block-user-info').innerHTML = `请选择对用户 <span class="font-black text-gray-900 underline decoration-orange-200 decoration-2">${name}</span> 执行的风控处理：`;
+            document.getElementById('block-modal').classList.remove('hide');
+        };
+
+        window.closeBlockModal = function() { document.getElementById('block-modal').classList.add('hide'); };
+
+        window.handleBlockAction = function(type) {
+            if (!currentBlockingId) return;
+            riskData = riskData.map(r => r.id === currentBlockingId ? {...r, isBlocked: true, action: `拉黑（${type}）`} : r);
+            closeBlockModal();
+            showRiskDashboard();
+        };
+
+        window.unblockUser = function(id) {
+            riskData = riskData.map(r => r.id === id ? {...r, isBlocked: false, action: '仅通知'} : r);
+            showRiskDashboard();
+        };
+
+        window.toggleStatus = function(id) {
+            strategyData = strategyData.map(s => s.id === id ? {...s, status: s.status === '启用' ? '停用' : '启用'} : s);
+            showStrategyBoard();
+        };
+
+        window.openConfigDrawer = function(task) {
+            document.getElementById('drawer').classList.remove('hide');
+            renderStrategyForm('drawer-body', true, task);
+        };
+
+        window.closeDrawer = function() { document.getElementById('drawer').classList.add('hide'); };
+
+        window.switchPlaceholder = function(view) {
+            updateActiveMenu('nav-' + (view === '需求管理' ? 'demand' : view === '数据管理' ? 'data' : 'project'));
+            document.getElementById('breadcrumb').innerText = view;
+            document.getElementById('main-content').innerHTML = `<div class="h-full flex flex-col items-center justify-center text-gray-400 fade-in"><i data-lucide="package" class="w-16 h-16 opacity-10 mb-4"></i><p class="font-medium text-lg tracking-tight">${view} 正在开发中...</p></div>`;
+            safeIcons();
+        };
+
+        // --- 初始化启动 ---
+        window.onload = () => { showRiskDashboard(); };
+    </script>
+</body>
+</html>
